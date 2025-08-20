@@ -1,6 +1,7 @@
-import telebot
-import sqlite3
+import repuests
+import os
 import time
+
 
 # Bot token
 TOKEN = "8170532675:AAFUsmsTKmumPW85J6iMnEaLQZHdF6qtIk4"
