@@ -1,0 +1,81 @@
+import telebot
+import sqlite3
+import time
+
+# Bot token
+TOKEN = "8170532675:AAFUsmsTKmumPW85J6iMnEaLQZHdF6qtIk4"
+bot = telebot.TeleBot(TOKEN)
+
+# Veritabanı ayarları
+conn = sqlite3.connect("refs.db", check_same_thread=False)
+cursor = conn.cursor()
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS users (
+    user_id INTEGER PRIMARY KEY,
+    refs INTEGER DEFAULT 0
+)
+""")
+conn.commit()
+
+# Kullanıcıyı ekle veya kontrol et
+def ensure_user(user_id):
+    cursor.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
+    if cursor.fetchone() is None:
+        cursor.execute("INSERT INTO users(user_id, refs) VALUES(?,?)", (user_id,0))
+        conn.commit()
+
+# /start komutu
+@bot.message_handler(commands=['start'])
+def start_cmd(message):
+    user_id = message.from_user.id
+    ensure_user(user_id)
+    # Kullanıcıya referans linki de verelim
+    ref_link = f"https://t.me/s4metwr1_bot?start={user_id}"
+    bot.send_message(user_id, f"Merhaba! Referans sistemine hoşgeldin.\nKendi referansını /refs ile görebilirsin.\nEn çok referans kasanları /top ile görebilirsin.\nSenin referans linkin: {ref_link}")
+
+# /refs komutu
+@bot.message_handler(commands=['refs'])
+def show_refs(message):
+    user_id = message.from_user.id
+    ensure_user(user_id)
+    cursor.execute("SELECT refs FROM users WHERE user_id=?", (user_id,))
+    refs = cursor.fetchone()[0]
+    bot.send_message(user_id, f"⭐ Senin referans puanın: {refs}")
+
+# /top komutu
+@bot.message_handler(commands=['top'])
+def top_refs(message):
+    cursor.execute("SELECT user_id, refs FROM users ORDER BY refs DESC LIMIT 10")
+    top_users = cursor.fetchall()
+    text = "🏆 En çok referans kasanlar:\n\n"
+    for i, (uid, refs) in enumerate(top_users, start=1):
+        text += f"{i}. Kullanıcı ID: {uid} → {refs} refs\n"
+    bot.send_message(message.from_user.id, text)
+
+# Admin referans ekleme komutu
+ADMIN_ID = 8061157059
+@bot.message_handler(commands=['addref'])
+def add_ref(message):
+    if message.from_user.id != ADMIN_ID:
+        bot.reply_to(message, "❌ Sadece admin kullanabilir!")
+        return
+    try:
+        _, user_id, amount = message.text.split()
+        user_id = int(user_id)
+        amount = int(amount)
+        ensure_user(user_id)
+        cursor.execute("UPDATE users SET refs = refs + ? WHERE user_id=?", (amount, user_id))
+        conn.commit()
+        bot.reply_to(message, f"✅ {user_id} kullanıcısına {amount} referans eklendi.")
+    except:
+        bot.reply_to(message, "Kullanım: /addref <user_id> <miktar>")
+
+# Sonsuz döngü ile sürekli çalıştır
+while True:
+    try:
+        print("🤖 Bot çalışıyor...")
+        bot.infinity_polling(timeout=10, long_polling_timeout=5)
+    except Exception as e:
+        print(f"Hata oluştu: {e}")
+        time.sleep(5)  # Hata olursa 5 saniye bekle ve yeniden başlat
